@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paper Summarizer & Analyzer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=Fira+Code:wght@300;400&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0f14;
+    --bg2: #13161d;
+    --surface: #191c25;
+    --surface2: #1f2330;
+    --border: #272b38;
+    --border2: #323747;
+    --text: #e2e4ec;
+    --text2: #9097b0;
+    --text3: #5a6080;
+    --cyan: #3dd6c8;
+    --cyan-dim: rgba(61,214,200,0.12);
+    --cyan-glow: rgba(61,214,200,0.06);
+    --amber: #f0a535;
+    --amber-dim: rgba(240,165,53,0.12);
+    --rose: #f06292;
+    --rose-dim: rgba(240,98,146,0.12);
+    --violet: #a78bfa;
+    --violet-dim: rgba(167,139,250,0.12);
+    --green: #4ade80;
+    --green-dim: rgba(74,222,128,0.12);
+  }
+
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+  }
+
+  /* scanline texture */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.012) 2px, rgba(255,255,255,0.012) 4px);
+  }
+
+  /* glow blobs */
+  .blob { position: fixed; border-radius: 50%; filter: blur(100px); pointer-events: none; z-index: 0; }
+  .blob1 { width: 500px; height: 500px; background: rgba(61,214,200,0.06); top: -150px; right: -100px; }
+  .blob2 { width: 400px; height: 400px; background: rgba(167,139,250,0.05); bottom: -100px; left: -80px; }
+
+  .wrap { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  /* ── Header ── */
+  header { margin-bottom: 48px; }
+  .header-top { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+  .logo-mark {
+    width: 48px; height: 48px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--cyan), #2bb8ac);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; flex-shrink: 0;
+    box-shadow: 0 0 24px rgba(61,214,200,0.3);
+  }
+  .header-text h1 {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-size: clamp(26px, 4vw, 38px);
+    font-weight: 400; line-height: 1.1;
+    color: var(--text);
+  }
+  .header-text h1 em { font-style: italic; color: var(--cyan); }
+  .header-sub { font-size: 13px; color: var(--text3); margin-top: 4px; font-weight: 300; }
+
+  .header-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .hpill {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 5px 12px;
+    font-family: 'Fira Code', monospace; font-size: 10px; color: var(--text3);
+    letter-spacing: 0.05em;
+  }
+  .hpill .dot { width: 5px; height: 5px; border-radius: 50%; }
+
+  /* ── Input panel ── */
+  .input-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 32px;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.3);
+  }
+
+  .panel-tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .tab {
+    flex: 1; padding: 14px 20px; text-align: center;
+    font-family: 'Fira Code', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text3); cursor: pointer; transition: all 0.2s;
+    border-right: 1px solid var(--border); user-select: none;
+  }
+  .tab:last-child { border-right: none; }
+  .tab:hover { color: var(--text2); background: var(--surface2); }
+  .tab.active { color: var(--cyan); background: var(--cyan-glow); border-bottom: 2px solid var(--cyan); margin-bottom: -1px; }
+
+  .tab-pane { display: none; padding: 24px; }
+  .tab-pane.active { display: block; }
+
+  .field-lbl {
+    font-family: 'Fira Code', monospace; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--text3); margin-bottom: 10px; display: block;
+  }
+
+  textarea, input[type="text"], select {
+    width: 100%;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 300; font-size: 14px;
+    padding: 12px 14px; outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    resize: none; appearance: none; -webkit-appearance: none;
+  }
+  textarea:focus, input:focus, select:focus {
+    border-color: var(--cyan);
+    box-shadow: 0 0 0 3px rgba(61,214,200,0.1);
+  }
+  textarea::placeholder, input::placeholder { color: var(--text3); }
+
+  .context-row { margin-top: 16px; }
+  .context-field { margin-top: 10px; }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed var(--border2);
+    border-radius: 12px; padding: 40px 24px;
+    text-align: center; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .upload-zone:hover { border-color: var(--cyan); background: var(--cyan-glow); }
+  .upload-zone.dragover { border-color: var(--cyan); background: var(--cyan-dim); }
+  .upload-icon { font-size: 36px; margin-bottom: 12px; display: block; }
+  .upload-title { font-size: 15px; font-weight: 500; color: var(--text2); margin-bottom: 4px; }
+  .upload-hint { font-size: 12px; color: var(--text3); }
+  .upload-filename { margin-top: 12px; font-family: 'Fira Code', monospace; font-size: 11px; color: var(--cyan); }
+  #fileInput { display: none; }
+
+  /* Focus area chips */
+  .focus-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .fchip {
+    cursor: pointer; user-select: none;
+    border: 1px solid var(--border2); border-radius: 20px;
+    padding: 5px 12px; font-size: 12px; color: var(--text2);
+    transition: all 0.15s;
+  }
+  .fchip:hover { border-color: var(--cyan); color: var(--cyan); }
+  .fchip.on { background: var(--cyan-dim); border-color: var(--cyan); color: var(--cyan); }
+
+  /* Submit */
+  .submit-area { padding: 0 24px 24px; }
+  .btn-analyze {
+    width: 100%; padding: 15px;
+    background: linear-gradient(135deg, var(--cyan), #2bb8ac);
+    border: none; border-radius: 10px; cursor: pointer;
+    font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 600;
+    color: #0d0f14; letter-spacing: 0.02em;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    transition: all 0.2s;
+  }
+  .btn-analyze:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(61,214,200,0.3); }
+  .btn-analyze:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  /* ── Loading ── */
+  .loading { display: none; text-align: center; padding: 64px 24px; }
+  .loading.on { display: block; }
+  .load-ring {
+    width: 44px; height: 44px; margin: 0 auto 20px;
+    border: 2px solid var(--border2); border-top-color: var(--cyan);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .load-label { font-family: 'Fira Code', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text3); }
+
+  /* ── Error ── */
+  .err { display: none; background: var(--rose-dim); border: 1px solid rgba(240,98,146,0.3); border-radius: 10px; padding: 14px 18px; color: var(--rose); font-size: 13px; margin-bottom: 20px; }
+  .err.on { display: block; }
+
+  /* ── Results ── */
+  .results { display: none; }
+  .results.on { display: block; }
+
+  /* TL;DR hero */
+  .tldr {
+    background: linear-gradient(135deg, rgba(61,214,200,0.08), rgba(61,214,200,0.03));
+    border: 1px solid rgba(61,214,200,0.2);
+    border-radius: 14px; padding: 28px;
+    margin-bottom: 24px; position: relative; overflow: hidden;
+  }
+  .tldr::before {
+    content: 'TL;DR';
+    position: absolute; top: 20px; right: 24px;
+    font-family: 'Fira Code', monospace; font-size: 9px; letter-spacing: 0.18em;
+    color: var(--cyan); opacity: 0.5;
+  }
+  .tldr-title { font-family: 'Instrument Serif', serif; font-size: 22px; color: var(--text); line-height: 1.3; margin-bottom: 8px; }
+  .tldr-authors { font-size: 12px; color: var(--text3); margin-bottom: 16px; font-family: 'Fira Code', monospace; }
+  .tldr-text { font-size: 14px; color: var(--text2); line-height: 1.7; }
+
+  /* Section cards */
+  .sections { display: grid; gap: 16px; }
+
+  .sec {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px; padding: 22px;
+    animation: fadeUp 0.4s ease both;
+  }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+
+  .sec-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .sec-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0;
+  }
+  .sec-label {
+    font-family: 'Fira Code', monospace; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
+  }
+  .sec-body { font-size: 13.5px; color: var(--text2); line-height: 1.7; font-weight: 300; }
+
+  /* color themes per section */
+  .sec.rq   { border-left: 3px solid var(--cyan);   }  .sec.rq   .sec-icon { background: var(--cyan-dim); }   .sec.rq   .sec-label { color: var(--cyan); }
+  .sec.meth { border-left: 3px solid var(--amber);  }  .sec.meth .sec-icon { background: var(--amber-dim); }  .sec.meth .sec-label { color: var(--amber); }
+  .sec.find { border-left: 3px solid var(--green);  }  .sec.find .sec-icon { background: var(--green-dim); }  .sec.find .sec-label { color: var(--green); }
+  .sec.lim  { border-left: 3px solid var(--rose);   }  .sec.lim  .sec-icon { background: var(--rose-dim); }   .sec.lim  .sec-label { color: var(--rose); }
+  .sec.impl { border-left: 3px solid var(--violet); }  .sec.impl .sec-icon { background: var(--violet-dim); } .sec.impl .sec-label { color: var(--violet); }
+  .sec.cite { border-left: 3px solid var(--amber);  }  .sec.cite .sec-icon { background: var(--amber-dim); }  .sec.cite .sec-label { color: var(--amber); }
+  .sec.rel  { border-left: 3px solid var(--violet); }  .sec.rel  .sec-icon { background: var(--violet-dim); } .sec.rel  .sec-label { color: var(--violet); }
+
+  /* bullet list style */
+  .sec-body ul { list-style: none; padding: 0; }
+  .sec-body ul li { padding: 6px 0 6px 18px; position: relative; border-bottom: 1px solid var(--border); }
+  .sec-body ul li:last-child { border-bottom: none; }
+  .sec-body ul li::before { content: '›'; position: absolute; left: 0; color: var(--text3); }
+
+  /* key quote */
+  .key-quote {
+    background: var(--surface2); border-left: 3px solid var(--cyan);
+    border-radius: 0 8px 8px 0; padding: 14px 16px; margin: 12px 0;
+    font-style: italic; font-size: 13px; color: var(--text2); line-height: 1.6;
+  }
+
+  /* stat pills */
+  .stat-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+  .stat-pill {
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 8px; padding: 8px 14px; text-align: center;
+  }
+  .stat-val { font-family: 'Fira Code', monospace; font-size: 15px; font-weight: 400; color: var(--text); display: block; }
+  .stat-lbl { font-family: 'Fira Code', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); margin-top: 2px; display: block; }
+
+  /* tags */
+  .tag-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+  .rtag {
+    font-family: 'Fira Code', monospace; font-size: 10px;
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 4px; padding: 3px 9px; color: var(--text3);
+  }
+
+  /* citation box */
+  .cite-box {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px;
+    font-family: 'Fira Code', monospace; font-size: 11px; color: var(--text3);
+    line-height: 1.6; cursor: pointer; transition: border-color 0.2s;
+    position: relative;
+  }
+  .cite-box:hover { border-color: var(--cyan); }
+  .cite-copy {
+    position: absolute; top: 8px; right: 10px;
+    font-size: 10px; color: var(--text3); letter-spacing: 0.08em;
+  }
+  .cite-box.copied { border-color: var(--green); }
+  .cite-box.copied .cite-copy { color: var(--green); }
+
+  /* reset btn */
+  .btn-reset {
+    margin-top: 28px; width: 100%; padding: 12px;
+    background: transparent; border: 1px solid var(--border2);
+    border-radius: 8px; cursor: pointer; color: var(--text3);
+    font-family: 'Space Grotesk', sans-serif; font-size: 13px;
+    transition: all 0.2s;
+  }
+  .btn-reset:hover { border-color: var(--text3); color: var(--text); }
+</style>
+</head>
+<body>
+<div class="blob blob1"></div>
+<div class="blob blob2"></div>
+
+<div class="wrap">
+  <header>
+    <div class="header-top">
+      <div class="logo-mark">📄</div>
+      <div class="header-text">
+        <h1>Paper <em>Analyzer</em></h1>
+        <div class="header-sub">Instant structured breakdown of any research paper</div>
+      </div>
+    </div>
+    <div class="header-pills">
+      <div class="hpill"><span class="dot" style="background:var(--cyan)"></span>Research Question</div>
+      <div class="hpill"><span class="dot" style="background:var(--amber)"></span>Methodology</div>
+      <div class="hpill"><span class="dot" style="background:var(--green)"></span>Key Findings</div>
+      <div class="hpill"><span class="dot" style="background:var(--rose)"></span>Limitations</div>
+      <div class="hpill"><span class="dot" style="background:var(--violet)"></span>Implications</div>
+    </div>
+  </header>
+
+  <div class="input-panel">
+    <div class="panel-tabs">
+      <div class="tab active" data-tab="url">🔗 DOI / URL</div>
+      <div class="tab" data-tab="paste">📋 Paste Text</div>
+      <div class="tab" data-tab="upload">📁 Upload PDF</div>
+    </div>
+
+    <!-- URL tab -->
+    <div class="tab-pane active" id="tab-url">
+      <label class="field-lbl">DOI or paper URL</label>
+      <input type="text" id="urlInput" placeholder="e.g. https://doi.org/10.1038/s41586-... or 10.1101/...">
+      <div class="context-row">
+        <label class="field-lbl" style="margin-top:16px">Your research context <span style="opacity:0.5;font-size:8px">(OPTIONAL — helps tailor the analysis)</span></label>
+        <div class="context-field">
+          <input type="text" id="urlContext" placeholder="e.g. I'm studying microplastics in freshwater ecosystems…">
+        </div>
+      </div>
+    </div>
+
+    <!-- Paste tab -->
+    <div class="tab-pane" id="tab-paste">
+      <label class="field-lbl">Paste abstract or full text</label>
+      <textarea id="pasteInput" rows="8" placeholder="Paste the paper's abstract, introduction, or full text here…"></textarea>
+      <div class="context-row">
+        <label class="field-lbl" style="margin-top:16px">Your research context <span style="opacity:0.5;font-size:8px">(OPTIONAL)</span></label>
+        <input type="text" id="pasteContext" placeholder="e.g. I'm studying microplastics in freshwater ecosystems…">
+      </div>
+    </div>
+
+    <!-- Upload tab -->
+    <div class="tab-pane" id="tab-upload">
+      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+        <span class="upload-icon">📂</span>
+        <div class="upload-title">Drop a PDF here or click to browse</div>
+        <div class="upload-hint">Supports PDF files up to ~50 pages</div>
+        <div class="upload-filename" id="uploadName"></div>
+      </div>
+      <input type="file" id="fileInput" accept=".pdf,.txt">
+      <div class="context-row">
+        <label class="field-lbl" style="margin-top:16px">Your research context <span style="opacity:0.5;font-size:8px">(OPTIONAL)</span></label>
+        <input type="text" id="uploadContext" placeholder="e.g. I'm studying microplastics in freshwater ecosystems…">
+      </div>
+    </div>
+
+    <!-- Focus area -->
+    <div style="padding: 0 24px 20px">
+      <label class="field-lbl">Focus areas</label>
+      <div class="focus-chips">
+        <div class="fchip on" data-f="research_question">Research Question</div>
+        <div class="fchip on" data-f="methodology">Methodology</div>
+        <div class="fchip on" data-f="findings">Key Findings</div>
+        <div class="fchip on" data-f="limitations">Limitations</div>
+        <div class="fchip on" data-f="implications">Implications</div>
+        <div class="fchip" data-f="citations">Citation Quotes</div>
+        <div class="fchip" data-f="relevance">Relevance to My Work</div>
+      </div>
+    </div>
+
+    <div class="submit-area">
+      <button class="btn-analyze" id="analyzeBtn" onclick="doAnalyze()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
+        Analyze Paper
+      </button>
+    </div>
+  </div>
+
+  <div class="loading" id="loading">
+    <div class="load-ring"></div>
+    <div class="load-label">Reading &amp; analyzing paper…</div>
+  </div>
+
+  <div class="err" id="errBox"></div>
+
+  <div class="results" id="results">
+    <div class="tldr" id="tldr"></div>
+    <div class="sections" id="sections"></div>
+    <button class="btn-reset" onclick="resetAll()">← Analyze Another Paper</button>
+  </div>
+</div>
+
+<script>
+  // Tabs
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      document.getElementById('tab-' + t.dataset.tab).classList.add('active');
+    });
+  });
+
+  // Focus chips
+  document.querySelectorAll('.fchip').forEach(c => c.addEventListener('click', () => c.classList.toggle('on')));
+
+  // Upload
+  const uploadZone = document.getElementById('uploadZone');
+  const fileInput  = document.getElementById('fileInput');
+  let uploadedFile = null;
+
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault(); uploadZone.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f) setFile(f);
+  });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+  function setFile(f) {
+    uploadedFile = f;
+    document.getElementById('uploadName').textContent = '✓ ' + f.name;
+  }
+
+  function getActiveFocus() {
+    return [...document.querySelectorAll('.fchip.on')].map(c => c.dataset.f);
+  }
+
+  function activeTab() {
+    return document.querySelector('.tab.active').dataset.tab;
+  }
+
+  async function getInputContent() {
+    const tab = activeTab();
+    if (tab === 'url') {
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) throw new Error('Please enter a DOI or URL.');
+      return { type: 'url', content: url, context: document.getElementById('urlContext').value.trim() };
+    }
+    if (tab === 'paste') {
+      const text = document.getElementById('pasteInput').value.trim();
+      if (!text) throw new Error('Please paste some text.');
+      return { type: 'text', content: text, context: document.getElementById('pasteContext').value.trim() };
+    }
+    if (tab === 'upload') {
+      if (!uploadedFile) throw new Error('Please select a PDF file.');
+      return new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = e => res({ type: 'pdf', content: e.target.result.split(',')[1], context: document.getElementById('uploadContext').value.trim() });
+        reader.onerror = () => rej(new Error('Could not read file.'));
+        reader.readAsDataURL(uploadedFile);
+      });
+    }
+  }
+
+  async function doAnalyze() {
+    let input;
+    try { input = await getInputContent(); } catch(e) { alert(e.message); return; }
+
+    const focus = getActiveFocus();
+    document.getElementById('loading').classList.add('on');
+    document.getElementById('results').classList.remove('on');
+    document.getElementById('errBox').classList.remove('on');
+    document.getElementById('analyzeBtn').disabled = true;
+
+    const focusInstructions = {
+      research_question: '"research_question": "The core research question or hypothesis being investigated"',
+      methodology: '"methodology": "Research design, methods, sample size, data collection approach"',
+      findings: '"findings": ["key finding 1", "key finding 2", "key finding 3"]',
+      limitations: '"limitations": ["limitation 1", "limitation 2"]',
+      implications: '"implications": "What this means for the field and future research"',
+      citations: '"citation_quotes": ["a short quotable finding or conclusion directly from the paper", "another quote"]',
+      relevance: '"relevance": "How this paper relates to or could inform the researcher\'s own work context"'
+    };
+
+    const focusFields = focus.map(f => focusInstructions[f]).filter(Boolean).join(',\n      ');
+
+    let messages;
+
+    if (input.type === 'pdf') {
+      messages = [{
+        role: 'user',
+        content: [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: input.content } },
+          { type: 'text', text: buildPrompt(focus, focusFields, input.context, 'the uploaded PDF') }
+        ]
+      }];
+    } else if (input.type === 'url') {
+      messages = [{ role: 'user', content: buildPrompt(focus, focusFields, input.context, null, input.content) }];
+    } else {
+      messages = [{ role: 'user', content: buildPrompt(focus, focusFields, input.context, input.content) }];
+    }
+
+    const tools = input.type === 'url' ? [{ type: 'web_search_20250305', name: 'web_search' }] : undefined;
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 3000,
+          ...(tools ? { tools } : {}),
+          messages
+        })
+      });
+      const data = await res.json();
+      let text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+      const clean = text.replace(/```json|```/g, '').trim();
+      let parsed;
+      try { parsed = JSON.parse(clean); }
+      catch { const m = clean.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : null; }
+      if (!parsed) throw new Error('Could not parse response. Try again.');
+      render(parsed, focus);
+    } catch(err) {
+      document.getElementById('errBox').textContent = 'Error: ' + err.message;
+      document.getElementById('errBox').classList.add('on');
+    } finally {
+      document.getElementById('loading').classList.remove('on');
+      document.getElementById('analyzeBtn').disabled = false;
+    }
+  }
+
+  function buildPrompt(focus, focusFields, context, pastedText, url) {
+    const src = url
+      ? `Search the web for this paper and analyze it: ${url}`
+      : pastedText
+        ? `Analyze this research paper text:\n\n${pastedText}`
+        : 'Analyze the provided PDF document.';
+
+    return `You are an expert research analyst. ${src}
+
+${context ? `The researcher's context: ${context}` : ''}
+Requested focus areas: ${focus.join(', ')}
+
+Respond ONLY with a valid JSON object — no markdown, no backticks:
+
+{
+  "title": "Full paper title",
+  "authors": "Author(s) and year",
+  "journal": "Journal or venue",
+  "tldr": "2-3 sentence plain-English summary a non-specialist could understand",
+  "keywords": ["keyword1", "keyword2", "keyword3", "keyword4"],
+  "stats": {
+    "year": "Publication year",
+    "sample_size": "Sample size or dataset size if applicable",
+    "field": "Primary academic field"
+  },
+  ${focusFields}
+}
+
+Be accurate, specific, and grounded in the actual paper content.`;
+  }
+
+  function render(d, focus) {
+    // TL;DR
+    document.getElementById('tldr').innerHTML = `
+      <div class="tldr-title">${d.title || 'Paper Analysis'}</div>
+      <div class="tldr-authors">${[d.authors, d.journal].filter(Boolean).join(' · ')}</div>
+      <div class="tldr-text">${d.tldr || ''}</div>
+      ${d.keywords ? `<div class="tag-row">${d.keywords.map(k=>`<span class="rtag">${k}</span>`).join('')}</div>` : ''}
+      ${d.stats ? `<div class="stat-row">
+        ${d.stats.year ? `<div class="stat-pill"><span class="stat-val">${d.stats.year}</span><span class="stat-lbl">Year</span></div>` : ''}
+        ${d.stats.sample_size ? `<div class="stat-pill"><span class="stat-val">${d.stats.sample_size}</span><span class="stat-lbl">Sample</span></div>` : ''}
+        ${d.stats.field ? `<div class="stat-pill"><span class="stat-val">${d.stats.field}</span><span class="stat-lbl">Field</span></div>` : ''}
+      </div>` : ''}
+    `;
+
+    const container = document.getElementById('sections');
+    container.innerHTML = '';
+    let delay = 0;
+
+    const secDefs = [
+      { key: 'research_question', cls: 'rq',   icon: '🔬', label: 'Research Question', type: 'text' },
+      { key: 'methodology',       cls: 'meth', icon: '⚗️',  label: 'Methodology',       type: 'text' },
+      { key: 'findings',          cls: 'find', icon: '📊', label: 'Key Findings',       type: 'list' },
+      { key: 'limitations',       cls: 'lim',  icon: '⚠️',  label: 'Limitations',       type: 'list' },
+      { key: 'implications',      cls: 'impl', icon: '💡', label: 'Implications',       type: 'text' },
+      { key: 'citation_quotes',   cls: 'cite', icon: '💬', label: 'Quotable Findings',  type: 'quotes' },
+      { key: 'relevance',         cls: 'rel',  icon: '🎯', label: 'Relevance to Your Work', type: 'text' },
+    ];
+
+    secDefs.forEach(def => {
+      if (!d[def.key]) return;
+      const sec = document.createElement('div');
+      sec.className = 'sec ' + def.cls;
+      sec.style.animationDelay = (delay * 0.08) + 's';
+      delay++;
+
+      let bodyHtml = '';
+      if (def.type === 'list' && Array.isArray(d[def.key])) {
+        bodyHtml = `<ul>${d[def.key].map(i=>`<li>${i}</li>`).join('')}</ul>`;
+      } else if (def.type === 'quotes' && Array.isArray(d[def.key])) {
+        bodyHtml = d[def.key].map(q=>`<div class="key-quote">"${q}"</div>`).join('');
+      } else {
+        bodyHtml = `<p>${d[def.key]}</p>`;
+      }
+
+      sec.innerHTML = `
+        <div class="sec-header">
+          <div class="sec-icon">${def.icon}</div>
+          <span class="sec-label">${def.label}</span>
+        </div>
+        <div class="sec-body">${bodyHtml}</div>
+      `;
+      container.appendChild(sec);
+    });
+
+    // Citation section
+    if (d.title) {
+      const year = d.stats?.year || new Date().getFullYear();
+      const authors = d.authors || 'Author(s)';
+      const cite = `${authors} (${year}). ${d.title}. ${d.journal || ''}.`;
+      const sec = document.createElement('div');
+      sec.className = 'sec cite';
+      sec.style.animationDelay = (delay * 0.08) + 's';
+      sec.innerHTML = `
+        <div class="sec-header">
+          <div class="sec-icon">📎</div>
+          <span class="sec-label">Citation (APA)</span>
+        </div>
+        <div class="sec-body">
+          <div class="cite-box" onclick="copyCite(this, \`${cite.replace(/`/g,"'")}\`)">
+            <span class="cite-copy">CLICK TO COPY</span>
+            ${cite}
+          </div>
+        </div>`;
+      container.appendChild(sec);
+    }
+
+    document.getElementById('results').classList.add('on');
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function copyCite(el, text) {
+    navigator.clipboard.writeText(text).then(() => {
+      el.classList.add('copied');
+      el.querySelector('.cite-copy').textContent = '✓ COPIED';
+      setTimeout(() => { el.classList.remove('copied'); el.querySelector('.cite-copy').textContent = 'CLICK TO COPY'; }, 2000);
+    });
+  }
+
+  function resetAll() {
+    document.getElementById('urlInput').value = '';
+    document.getElementById('pasteInput').value = '';
+    document.getElementById('uploadName').textContent = '';
+    uploadedFile = null;
+    document.getElementById('results').classList.remove('on');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+</script>
+</body>
+</html>
